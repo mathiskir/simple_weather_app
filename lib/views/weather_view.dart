@@ -1,5 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
+import 'package:simple_weather_app/data/objects/api_forecast_response.dart';
+import 'package:simple_weather_app/data/weather_api.dart';
+import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:simple_weather_app/env/env.dart';
+import 'package:simple_weather_app/helper/helper_functions.dart';
+import 'package:simple_weather_app/views/widgets/daily_weather_widget.dart';
+import 'package:simple_weather_app/views/widgets/error_widget.dart';
+import 'package:simple_weather_app/views/widgets/footer_widget.dart';
+import 'package:simple_weather_app/views/widgets/hourly_weather_widget.dart';
+import 'package:simple_weather_app/views/widgets/loading_widget.dart';
+import 'package:simple_weather_app/views/widgets/location_selector_widget.dart';
+import 'package:simple_weather_app/views/widgets/sunpath_widget.dart';
+import 'package:simple_weather_app/views/widgets/top_app_bar_widget.dart';
+import 'package:simple_weather_app/views/widgets/uv_index_graph_widget.dart';
+import 'package:simple_weather_app/views/widgets/weather_metrics_bar_widget.dart';
+import 'package:simple_weather_app/views/widgets/weather_summary_widget.dart';
 
 class Weather extends StatefulWidget {
   const Weather({super.key});
@@ -9,311 +27,106 @@ class Weather extends StatefulWidget {
 }
 
 class _WeatherState extends State<Weather> {
+  late Future<ApiForecastResponse> weatherData;
+  late String currentCity;
+  late String apikey = Env.weatherApiKey;
+  late SharedPreferences prefs;
+  late String selectedFont = "AR One Sans";
+  late Future googleFontsFuture;
+  bool _isInitalized = false;
+  final GlobalKey<FormState> _locationFormKey = GlobalKey<FormState>();
+  final TextEditingController _locationFormController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+  }
+
+  @override
+  void didChangeDependencies() {
+    if(!_isInitalized){
+      weatherData = assignWeatherDataCurrentCity();
+      googleFontsFuture = GoogleFonts.pendingFonts([GoogleFonts.arOneSans()]);
+      _isInitalized = true;
+    }
+    super.didChangeDependencies();
+  }
+
+  Future<String> getSavedCity () async {
+    prefs = await SharedPreferences.getInstance();
+    return prefs.getString('currentCity') ?? 'Berlin';
+  }
+
+  Future setSavedCity (city) async{
+    prefs = await SharedPreferences.getInstance();
+    return prefs.setString('currentCity', city);
+  }
+
+  Future<ApiForecastResponse> assignWeatherDataCurrentCity() async {
+    currentCity = await getSavedCity();
+    return Provider.of<WeatherApi>(context, listen: false).fetchForecast(currentCity, apikey);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: int.parse(DateFormat('H').format(DateTime.now())) >= 22 ? Color.fromARGB(255, 3, 83, 244): Color.fromARGB(255, 3, 160, 244),
       extendBodyBehindAppBar: true,
-      body: DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color.fromARGB(255, 3, 180, 244), Color.fromARGB(255, 3, 140, 244)],
-          ),
-        ),
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.start,
-            children: [
-              Container(
-                padding: EdgeInsets.only(top: 50, left: 15, right: 15),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
-                      children: [
-                        IconButton(
-                            icon: Icon(
-                              Icons.location_pin,
-                              color: Colors.white,
-                              size: 30,
-                            ),
-                            onPressed:() {},
-                          ),
-                        SizedBox(width: 10),
-                        Text(
-                          "Oldenburg",
-                          style: GoogleFonts.lexendExa(
-                            fontSize: 17,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ],
-                    ),
-                    IconButton(
-                      icon: Icon(Icons.refresh, color: Colors.white, size: 35),
-                      onPressed: () {},
-                    ),
-                  ],
+      body: FutureBuilder(
+        future: Future.wait([weatherData, googleFontsFuture]),
+        builder: (contexts, snapshot) {
+          if (snapshot.connectionState == ConnectionState.done && snapshot.hasData
+          ) {
+            return RefreshIndicator(
+            onRefresh: () async {
+              setState((){
+                weatherData = Provider.of<WeatherApi>(context, listen: false).fetchForecast(currentCity, apikey);
+              });
+            },
+            child: Container(
+              height: MediaQuery.of(context).size.height,
+              width: MediaQuery.of(context).size.width,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: snapshot.data![0].current.is_day!=0 ? [Color.fromARGB(255, 3, 180, 244), Color.fromARGB(255, 3, 140, 244)] : [Color.fromARGB(255, 3, 83, 244), Color.fromARGB(255, 3, 31, 244)],
                 ),
               ),
-              Image.asset(
-                'assets/images/cloudy-with-sun.png', 
-                scale: 2.3
-              ),
-              Text(
-                "28°",
-                style: GoogleFonts.lexendExa(
-                  fontSize: 80,
-                  color: Colors.white,
-                )
-              ),
-              Text(
-                "Teils Sonnig, teils Bewölkt\nMax.: 32° Min.: 20°", 
-                textAlign: TextAlign.center,
-                style: GoogleFonts.arOneSans(
-                  fontSize: 16,
-                  color: Colors.white,
-                  fontWeight: FontWeight.w500
-                )
-              ),
-              Container(
-                padding: EdgeInsets.all(12),
-                margin: EdgeInsets.only(top: 20, bottom: 20, left: 30, right: 30),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(16),
-                  color: Color.fromARGB(192, 141, 196, 255)
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Container(
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.water_drop,
-                            color: Colors.white,  
-                          ),
-                          Text(
-                            "98%",
-                            style: GoogleFonts.arOneSans(
-                              fontSize: 14,
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold
-                            )
-                          )
-                        ],
-                      ),
-                    ),
-                    Container(
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.thermostat,
-                            color: Colors.white,  
-                          ),
-                          Text(
-                            "22%",
-                            style: GoogleFonts.arOneSans(
-                              fontSize: 14,
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold
-                            )
-                          )
-                        ],
-                      ),
-                    ),
-                    Container(
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.air,
-                            color: Colors.white,  
-                          ),
-                          Text(
-                            "20km/h",
-                            style: GoogleFonts.arOneSans(
-                              fontSize: 14,
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold
-                            )
-                          )
-                        ],
-                      ),
-                    )
-                  ],
-                )
-              ),
-              Container(
-                margin: EdgeInsets.only(top: 0, bottom: 10, left: 30, right: 30),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(16),
-                  color: Color.fromARGB(192, 141, 196, 255)
-                ),
+              child: SingleChildScrollView(
                 child: Column(
+                  mainAxisAlignment: MainAxisAlignment.start,
                   children: [
-                    Container(
-                      margin: EdgeInsets.only(left: 12, right: 12, top: 12),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            "Heute",
-                            style: GoogleFonts.lexendExa(
-                              fontSize: 17,
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold
-                            ),
-                          ),
-                          Text(
-                            "04 August",
-                            style: GoogleFonts.lexendExa(
-                              fontSize: 17,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ],
-                      ),
+                    topAppBar(
+                      context: context, 
+                      locationFormKey: _locationFormKey, 
+                      locationFormController: _locationFormController, 
+                      snapshot: snapshot,
+                      onConfirmationPress: (city) {
+                        setState(() {
+                          currentCity = _locationFormController.text;
+                          weatherData = Provider.of<WeatherApi>(context, listen: false).fetchForecast(currentCity, apikey);
+                        });
+                      },
                     ),
-                    SizedBox(height: 10,),
-                    SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          SizedBox(width: 12),
-                          HourlyWeatherItem("20°", "rain.png", "14:00"),
-                          HourlyWeatherItem("19°", "storm.png", "15:00"),
-                          HourlyWeatherItem("17°", "storm.png", "16:00"),
-                          HourlyWeatherItem("18°", "rain.png", "16:00"),
-                          SizedBox(width: 12),
-                        ],
-                      ),
-                    )
+                    weatherSummary(snapshot: snapshot),
+                    weatherMetricsBar(snapshot: snapshot),
+                    hourlyWeather(snapshot: snapshot, context: context),
+                    dailyWeather(snapshot: snapshot),
+                    sunpath(snapshot: snapshot),
+                    uvIndexGraph(snapshot: snapshot, context: context),
+                    footer(),
                   ],
                 ),
               ),
-              Container(
-                padding: EdgeInsets.all(12),
-                  margin: EdgeInsets.only(top: 10, bottom: 10, left: 30, right: 30),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(16),
-                    color: Color.fromARGB(192, 141, 196, 255)
-                  ),
-                child: Column(
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          "Wochenübersicht",
-                          style: GoogleFonts.lexendExa(
-                            fontSize: 17,
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold
-                          ),
-                        ),
-                        Icon(
-                          Icons.calendar_month,
-                          color: Colors.white,
-                          size: 30
-                        ),
-                      ],
-                    ),
-                    SizedBox(height: 10,),
-                    Column(
-                      children: [
-                        DailyWeatherItem("Heute", "rain.png", "32°", "20°"),
-                        DailyWeatherItem("Mittwoch", "sunny.png", "29°", "22°"),
-                        DailyWeatherItem("Donnerstag", "cloudy-with-sun.png", "26°", "19°")
-                      ],
-                    )
-                  ],
-                )
-              )
-            ],
-          ),
-        ),
+            ),
+                          );
+          } else if(snapshot.hasError){
+            return error(snapshot: snapshot, context: context);
+          }
+        return loading();
+        },
       ),
     );
   }
-}
-
-Widget HourlyWeatherItem(String temp, String icon, String hour){
-  return Container(
-    margin: EdgeInsets.all(10),
-    child: Column(
-      children: [
-        Text(
-          "$temp",
-          style: GoogleFonts.lexendExa(
-            fontSize: 17,
-            color: Colors.white,
-          ),
-        ),
-        SizedBox(height: 20,),
-        Image.asset(
-          'assets/images/$icon', 
-          scale: 9
-        ),
-        SizedBox(height: 20,),
-        Text(
-          "$hour",
-          style: GoogleFonts.lexendExa(
-            fontSize: 17,
-            color: Colors.white,
-          ),
-    
-        )
-      ],
-    ),
-  );
-}
-
-Widget DailyWeatherItem(String day, String icon, String maxTemp, String minTemp){
-  return Container(
-    margin: EdgeInsets.only(left: 10, right: 10, bottom: 5),
-    child: Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        SizedBox(
-          width: 110,
-          child: Text(
-            "$day",
-            style: GoogleFonts.lexendExa(
-              fontSize: 15,
-              color: Colors.white,
-            ),
-          ),
-        ),
-        Image.asset(
-          'assets/images/$icon', 
-          scale: 15
-        ),
-        SizedBox(
-          width: 70,
-          child: Row(
-            children: [
-              Text(
-                minTemp,
-                style: GoogleFonts.lexendExa(
-                  fontSize: 15,
-                  color: Colors.white,
-                ),
-              ),
-              SizedBox(width: 5),
-              Text(
-                minTemp,
-                style: GoogleFonts.lexendExa(
-                  fontSize: 15,
-                  color: Colors.white,
-                ),
-              )
-            ],
-          )
-        )
-      ],
-    )
-  );
 }
