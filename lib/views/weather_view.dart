@@ -102,10 +102,11 @@ class _WeatherState extends State<Weather> {
                       locationFormKey: _locationFormKey, 
                       locationFormController: _locationFormController, 
                       snapshot: snapshot,
-                      onConfirmationPress: (city) {
+                      onConfirmationPress: (city) async {
+                        await setSavedCity(city);
                         setState(() {
-                          currentCity = _locationFormController.text;
-                          weatherData = Provider.of<WeatherApi>(context, listen: false).fetchForecast(currentCity, apikey);
+                          currentCity = city;
+                          weatherData = Provider.of<WeatherApi>(context, listen: false).fetchForecast(city, apikey);
                         });
                       },
                     ),
