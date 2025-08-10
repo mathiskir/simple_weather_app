@@ -12,7 +12,6 @@ class MainApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    precacheImage(AssetImage("assets/images/rain.png"), context);
     return Provider<WeatherApi>(
       create: (context) => WeatherApi(),
       child: const MaterialApp(
